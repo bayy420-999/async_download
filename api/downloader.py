@@ -28,8 +28,7 @@ class Downloader:
                         pbar.update(len(chunk))
 
     def merge_file(self, temp_path, filename):
-        files = [file for file in os.listdir(temp_path)]
-        files.sort()
+        files = sorted(os.listdir(temp_path))
         filename = self.filepath + filename
 
         with open(filename, 'ab') as outfile:
