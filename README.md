@@ -14,7 +14,7 @@
 
 ## Usage 
 
-" LinkParser class 
+* LinkParser class 
   Method:
   |Method|Params|
   |------|------|
