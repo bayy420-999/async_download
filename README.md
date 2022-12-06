@@ -1,4 +1,6 @@
-# Python module for downloading file asynchronously 
+# Async Download
+
+Python module for downloading file asynchronously 
 
 ## Installation 
 
