@@ -18,13 +18,13 @@ class FileInfo(BaseModel):
 class LinkParser:
     def __init__(
         self,
-        session: aiohttp.ClientSession
+        session  : aiohttp.ClientSession
         ) -> None:
         self.session = session 
 
     async def parse_mediafire(
         self,
-        url: str
+        url     : str
         ) -> str:
         async with self.session.get(url) as resp:
             assert resp.status == 200, 'Link not working'
