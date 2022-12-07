@@ -1,5 +1,5 @@
 import os, re, inquirer
-import asyncio, aiohttp, aiofiles
+import asyncio, aiohttp
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Iterable
 
