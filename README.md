@@ -22,6 +22,8 @@ Python module for downloading file asynchronously
 ## Usage 
 
 ### Example
+
+Currently its only support Mediafire links, i'll add more download parser later.
 * Basic example
   ```py
   import asyncio # You should importing asyncio package
