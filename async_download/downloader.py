@@ -1,24 +1,35 @@
-import os, re, inquirer
-import asyncio, aiohttp
+"""Async Downloader module"""
+
+# Standar import
+import os
+import re
+import asyncio
+from typing import List, Optional, Iterable
+
+# Non standar import
+import inquirer
+import aiohttp
 from pydantic import BaseModel
-from typing import List, Dict, Optional, Iterable
 
 class Chunk(BaseModel):
-    start   : int 
+    """Chunk class contains start and end, that can be used for Range headers"""
+    start   : int
     end     : int
 
 class FileInfo(BaseModel):
+    """FileInfo class"""
     filename    : str
-    file_size   : int 
-    download_url: str 
+    file_size   : int
+    download_url: str
     chunk_list  : Optional[List[Chunk]]
 
 class LinkParser:
+    """Class that contains various method to parse download link from various site"""
     def __init__(
         self,
         session : aiohttp.ClientSession
     ) -> None   :
-        self.session = session 
+        self.session = session
 
     async def parse_mediafire(
         self,
@@ -33,9 +44,10 @@ class LinkParser:
         self,
         url     : str,
     ) -> str    :
-        pass
+        """Method to parse 77file url"""
 
 class Downloader:
+    """The main class"""
     def __init__(
         self,
         filepath : str = './',
@@ -54,16 +66,15 @@ class Downloader:
         """Method that return FileInfo object that contains File information from given url"""
         download_url   = await self.parser.parse_mediafire(url)
         async with self.session.head(download_url) as resp:
-            filename   = re.search(r'filename\=\"(.*?)\"', resp.headers.get('Content-Disposition'))[1]
+            pattern    = r'filename\=\"(.*?)\"'
+            filename   = re.search(pattern, resp.headers.get('Content-Disposition'))[1]
             file_size  = int(resp.headers.get('Content-Length'))
-            temp_path  = f'temp/{filename}'
             chunk_size = file_size // self.chunk
             start, end = 0, chunk_size
 
             if get_chunk_info:
                 chunk_list = []
                 for idx in range(self.chunk):
-                    chunk_chunk_size = end - start + 1
                     chunk_list.append(
                         Chunk(
                             start    = start,
@@ -91,7 +102,7 @@ class Downloader:
         headers ={'Range': f"bytes={chunk.start}-{chunk.end}"}
         async with self.session.get(url, headers = headers) as resp:
             return await resp.content.read()
- 
+
     async def download(
         self,
         url  : str
@@ -131,17 +142,23 @@ class Downloader:
             ]
 
             answers = inquirer.prompt(questions)
-            if answers.get('actions') == 'Replace file' and answers.get('confirm_replace_file'):
+            if answers.get('actions') == 'Replace file' \
+            and answers.get('confirm_replace_file'):
                 os.system(f'rm "{file_info.filename}"')
-            elif answers.get('actions') == 'Replace file' and not answers.get('confirm_replace_file'):
+
+            if answers.get('actions') == 'Replace file' \
+            and not answers.get('confirm_replace_file'):
                 answers = inquirer.prompt(questions)
 
-            if answers.get('actions') == 'Rename file' and answers.get('rename_file'):
+            if answers.get('actions') == 'Rename file' \
+            and answers.get('rename_file'):
                 file_info.filename = answers.get('rename_file')
 
-            if answers.get('actions') == 'Cancel download' and answers.get('confirm_cancel_download'):
+            if answers.get('actions') == 'Cancel download' \
+            and answers.get('confirm_cancel_download'):
                 return
-            elif answers.get('actions') == 'Cancel download' and not answers.get('confirm_cancel_download'):
+            if answers.get('actions') == 'Cancel download' \
+            and not answers.get('confirm_cancel_download'):
                 answers = inquirer.prompt(questions)
 
         filepath = f'{self.filepath}/{file_info.filename}'
@@ -151,9 +168,9 @@ class Downloader:
             ]
         )
 
-        with open(filepath, 'ab') as f:
+        with open(filepath, 'ab') as f_handler:
             for section in sections:
-                f.write(section)
+                f_handler.write(section)
 
         print(f'{file_info.filename} downloaded!')
 
@@ -161,10 +178,10 @@ class Downloader:
         self,
         urls : Iterable
     ) -> None:
-        """Wrapper for download() method. Download multiple"""
-        async with asyncio.TaskGroup() as tg:
+        """Wrapper for download() method. Download multiple files"""
+        async with asyncio.TaskGroup() as task_group:
             for url in urls:
-                tg.create_task(self.download(url))
+                task_group.create_task(self.download(url))
         await self.close_session()
 
     async def close_session(self):
