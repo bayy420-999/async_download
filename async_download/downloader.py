@@ -1,11 +1,9 @@
 import os, re, inquirer
 import asyncio, aiohttp, aiofiles
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import List, Dict, Optional, Iterable
 
 class Chunk(BaseModel):
-    filename: str
-    size    : int 
     start   : int 
     end     : int
 
@@ -18,24 +16,31 @@ class FileInfo(BaseModel):
 class LinkParser:
     def __init__(
         self,
-        session  : aiohttp.ClientSession
-        ) -> None:
+        session : aiohttp.ClientSession
+    ) -> None   :
         self.session = session 
 
     async def parse_mediafire(
         self,
         url     : str
-        ) -> str:
+    ) -> str    :
+        """Method to parse Mediafire url"""
         async with self.session.get(url) as resp:
             assert resp.status == 200, 'Link not working'
             return re.search(r'href\=\"(.*?)\"\s+id\=\"downloadButton\"', await resp.text())[1]
+
+    async def parse_77file(
+        self,
+        url     : str,
+    ) -> str    :
+        pass
 
 class Downloader:
     def __init__(
         self,
         filepath : str = './',
         chunk    : str = 10
-        ) -> None:
+    ) -> None    :
         self.session    = aiohttp.ClientSession()
         self.parser     = LinkParser(self.session)
         self.filepath   = filepath
@@ -45,7 +50,8 @@ class Downloader:
         self,
         url           : str,
         get_chunk_info: bool = True
-        ) -> FileInfo :
+    ) -> FileInfo     :
+        """Method that return FileInfo object that contains File information from given url"""
         download_url   = await self.parser.parse_mediafire(url)
         async with self.session.head(download_url) as resp:
             filename   = re.search(r'filename\=\"(.*?)\"', resp.headers.get('Content-Disposition'))[1]
@@ -57,12 +63,9 @@ class Downloader:
             if get_chunk_info:
                 chunk_list = []
                 for idx in range(self.chunk):
-                    tempfile         = f'part-{idx}.tmp'
                     chunk_chunk_size = end - start + 1
                     chunk_list.append(
                         Chunk(
-                            filename = tempfile,
-                            size     = chunk_chunk_size,
                             start    = start,
                             end      = end
                         )
@@ -81,34 +84,19 @@ class Downloader:
 
     async def get_section(
         self,
-        url      : str,
-        chunk    : Chunk,
-        temp_path: str
-        ) -> None:
+        url  : str,
+        chunk: Chunk,
+    ) -> None:
+        """Download section from given range headers"""
         headers ={'Range': f"bytes={chunk.start}-{chunk.end}"}
         async with self.session.get(url, headers = headers) as resp:
-            async with aiofiles.open(f'{temp_path}/{chunk.filename}', mode = 'wb') as f:
-                await f.write(await resp.content.read())
-
-    def merge_file(
-        self,
-        temp_path: str,
-        filename : str
-        ) -> None:
-        files = sorted(os.listdir(temp_path))
-        filename = self.filepath + filename
-
-        with open(filename, 'ab') as outfile:
-            for file in files:
-                with open(f'{temp_path}/{file}', 'rb') as f:
-                    outfile.write(f.read())
-
-        os.system(f'rm -rf "{temp_path}"')
+            return await resp.content.read()
  
     async def download(
         self,
-        url      : str
-        ) -> None:
+        url  : str
+    ) -> None:
+        """Wrapper for get_section() method. Download single file"""
         file_info = await self.get_file_info(url)
 
         if file_info.filename in os.listdir():
@@ -136,7 +124,7 @@ class Downloader:
                 ),
                 inquirer.Confirm(
                     'confirm_cancel_download',
-                    message  = 'Are you sure to replace the file',
+                    message  = 'Are you sure to cancel download',
                     default  = False,
                     ignore   = lambda x: x['actions'] != 'Cancel download'
                 ),
@@ -144,7 +132,7 @@ class Downloader:
 
             answers = inquirer.prompt(questions)
             if answers.get('actions') == 'Replace file' and answers.get('confirm_replace_file'):
-                os.system(f'rm {file_info.filename}')
+                os.system(f'rm "{file_info.filename}"')
             elif answers.get('actions') == 'Replace file' and not answers.get('confirm_replace_file'):
                 answers = inquirer.prompt(questions)
 
@@ -156,29 +144,29 @@ class Downloader:
             elif answers.get('actions') == 'Cancel download' and not answers.get('confirm_cancel_download'):
                 answers = inquirer.prompt(questions)
 
-        temp_path = f'{self.filepath}/temp/{file_info.filename}'
-        os.makedirs(temp_path, exist_ok = True)
-        async with asyncio.TaskGroup() as tg:
-            for chunk in file_info.chunk_list:
-                tg.create_task(
-                    self.get_section(
-                        file_info.download_url,
-                        chunk,
-                        temp_path
-                    )
-                )
+        filepath = f'{self.filepath}/{file_info.filename}'
+        sections = await asyncio.gather(
+            *[
+                self.get_section(file_info.download_url, chunk) for chunk in file_info.chunk_list
+            ]
+        )
 
-        self.merge_file(temp_path, file_info.filename)
+        with open(filepath, 'ab') as f:
+            for section in sections:
+                f.write(section)
+
         print(f'{file_info.filename} downloaded!')
 
     async def batch_download(
         self,
-        urls     : List[str]
-        ) -> None:
+        urls : Iterable
+    ) -> None:
+        """Wrapper for download() method. Download multiple"""
         async with asyncio.TaskGroup() as tg:
             for url in urls:
                 tg.create_task(self.download(url))
         await self.close_session()
 
     async def close_session(self):
+        """Closing aiohttp.ClientSession() session"""
         await self.session.close()
